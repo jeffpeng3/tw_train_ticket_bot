@@ -38,7 +38,7 @@ class RailwayBot(threading.Thread):
 
       start_title = self.now()+'\n'+rideDate+ ' ' +startStation+"👉"+endStation+" "+normalQty+"張 "+" "+trainNo_1+" "+trainNo_2+" "+trainNo_3
       print(start_title)
-      f = open('log/log_'+self.file_uuid+'.txt','w')
+      f = open('log/log_'+self.file_uuid+'.txt','w', encoding='UTF-8')
       f.write(start_title)
       f.close()
       # self.main()
@@ -187,21 +187,21 @@ class RailwayBot(threading.Thread):
     times = 0
     while(not('訂票成功' in buy_status) and not(self.kill_status)):
       times += 1
-      try:
-        buy_status = self.buy_tickets(pid, startStation, endStation, normalQty, rideDate, trainNo_1, trainNo_2, trainNo_3, canChangeSeat)
-        if "驗證碼驗證失敗" in buy_status:
-          times -= 1
+      # try:
+      buy_status = self.buy_tickets(pid, startStation, endStation, normalQty, rideDate, trainNo_1, trainNo_2, trainNo_3, canChangeSeat)
+      if "驗證碼驗證失敗" in buy_status:
+        times -= 1
+      else:
+        res = str(self.now()) + "\nt" + str(rideDate) + " " + str(startStation.split('-')[1]) + "👉" + str(endStation.split('-')[1]) + " " + str(normalQty)+ "張 " + str(trainNo_1)+ " " + str(trainNo_2)+ " " + str(trainNo_3) + "\n"+"第 "+str(times)+" 次嘗試購票 "+ buy_status+"\n"
+        # print(res)
+        if times % 2 == 1:
+          f = open('log/log_'+self.file_uuid+'.txt','w', encoding='UTF-8')
         else:
-          res = str(self.now()) + "\nt" + str(rideDate) + " " + str(startStation.split('-')[1]) + "👉" + str(endStation.split('-')[1]) + " " + str(normalQty)+ "張 " + str(trainNo_1)+ " " + str(trainNo_2)+ " " + str(trainNo_3) + "\n"+"第 "+str(times)+" 次嘗試購票 "+ buy_status+"\n"
-          # print(res)
-          if times % 2 == 1:
-            f = open('log/log_'+self.file_uuid+'.txt','w')
-          else:
-            f = open('log/log_'+self.file_uuid+'.txt','a')
-          f.write(res)
-          f.close()
-      except:
-        print("Unexpected error:", sys.exc_info()[0])
+          f = open('log/log_'+self.file_uuid+'.txt','a', encoding='UTF-8')
+        f.write(res)
+        f.close()
+      # except:
+      #   print("Unexpected error:", sys.exc_info()[0])
         # break
 
 
@@ -256,10 +256,10 @@ def get_All_Log():
         all_log_file.append("log/"+x.replace('\n', ''))
     tasks = []
     for log in all_log_file:
-        f = open(log, 'r')
+        f = open(log, 'r', encoding='UTF-8')
         logs_detal = f.read()
         f.close()
-        f = open(log, 'r')
+        f = open(log, 'r', encoding='UTF-8')
         logs_detal_array = f.readlines()[1].split(" ",1)
         f.close()
         tasks.append(

@@ -7,3 +7,5 @@ beautifulsoup4==4.6.3
 urllib3==1.24.3
 Flask==1.1.4
 tensorflow
+MarkupSafe==2.0.1
+lxml
