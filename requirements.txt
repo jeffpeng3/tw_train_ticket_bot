@@ -1,8 +1,8 @@
 pydub==0.25.1
 requests==2.23.0
+numpy==1.21.5
 librosa==0.9.1
 numba==0.8
-numpy==1.21.5
 beautifulsoup4==4.6.3
 urllib3==1.24.3
 Flask==1.1.4
