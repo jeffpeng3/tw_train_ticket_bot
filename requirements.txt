@@ -6,7 +6,8 @@ numba==0.51.2
 beautifulsoup4==4.6.3
 urllib3==1.24.3
 Flask==1.1.4
-tensorflow-cpu
+tensorflow-cpu==2.11.1
+tensorflow-io-gcs-filesystem==0.34.0
 MarkupSafe==2.0.1
 lxml
 gunicorn

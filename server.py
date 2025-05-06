@@ -1,11 +1,9 @@
 # -*- coding: utf-8 -*-
-import requests     
+import requests
 from pydub import AudioSegment
-import random
 import librosa
 import numpy as np
 import os
-import sys
 from bs4 import BeautifulSoup
 from datetime import datetime,timezone,timedelta
 import tensorflow as tf
@@ -65,7 +63,7 @@ class RailwayBot(threading.Thread):
   def wav2mfcc(self, file_path, max_pad_len=35):
       wave, sr = librosa.load(file_path, mono=True, sr=None)
       wave = wave[::3]
-      mfcc = librosa.feature.mfcc(wave, sr=16000)
+      mfcc = librosa.feature.mfcc(y=wave, sr=16000)
       pad_width = max_pad_len - mfcc.shape[1]
       if pad_width<0:
         print(pad_width)
@@ -185,7 +183,7 @@ class RailwayBot(threading.Thread):
     trainNo_3=self.trainNo_3
     buy_status = ""
     times = 0
-    while(not('訂票成功' in buy_status) and not(self.kill_status)):
+    while('訂票成功' not in buy_status and not self.kill_status):
       times += 1
       # try:
       buy_status = self.buy_tickets(pid, startStation, endStation, normalQty, rideDate, trainNo_1, trainNo_2, trainNo_3, canChangeSeat)
