@@ -1,7 +1,6 @@
 from time import time
 from collections import Counter
 from captcha_handler import CaptchaResolver
-from typing import List, Dict
 
 # 初始化 CaptchaResolver
 t_init_start: float = time()
@@ -14,7 +13,7 @@ AUDIO_FILE: str = "audio.mp3"
 
 # --- 測試單個任務執行時間 (內部已並行化) ---
 print(f"\nRunning a single captcha processing task ({NUM_SINGLE_TASK_RUNS} time(s)) to measure performance...")
-single_task_results: List[str] = []
+single_task_results: list[str] = []
 total_time_single_task_execution: float = 0.0
 
 # Run it a few times to get a more stable average if needed, but for now, once is fine.
@@ -23,7 +22,8 @@ total_time_single_task_execution: float = 0.0
 
 for i in range(NUM_SINGLE_TASK_RUNS):
     time_single_task_start: float = time()
-    result: str = captcha_solver._process_audio_to_text(AUDIO_FILE)
+    with open(AUDIO_FILE, "rb") as audio_file:
+        result: str = captcha_solver._process_audio_to_text(audio_file)
     time_single_task_end: float = time()
     
     current_run_time: float = time_single_task_end - time_single_task_start

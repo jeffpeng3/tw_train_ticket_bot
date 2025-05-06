@@ -1,16 +1,25 @@
 [project]
 name = "tw-train-ticket-bot"
 version = "0.1.0"
-requires-python = ">=3.13"
+requires-python = ">=3.12"
 dependencies = [
     "beautifulsoup4==4.13.4",
     "librosa==0.11.0",
+    "SoundFile==0.13.1",
     "lxml==5.4.0",
-    "pydub==0.25.1",
     "aiohttp>=3.11.18",
     "torch==2.7.0",
+    "markupsafe==3.0.2",
+    "onnx2torch>=1.5.15",
 ]
+[tool.uv.sources]
+torch = { index = "pytorch" }
+markupsafe = { index = "orig" }
 
 [[tool.uv.index]]
 name = "pytorch"
 url = "https://download.pytorch.org/whl/cpu"
+
+[[tool.uv.index]]
+name = "orig"
+url = "https://pypi.python.org/simple"
