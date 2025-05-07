@@ -73,43 +73,33 @@ class CaptchaResolver:
 
         return "".join(predicted_chars)
 
-    def _is_ffmpeg_available(self) -> bool:
-        return shutil.which(self.ffmpeg_path) is not None
-
-    def _process_audio_to_text(self, audio_stream: io.BufferedIOBase) -> str:
+    def _process_audio_to_text(self, audio_stream: io.BufferedIOBase, trans = True) -> str:
         y: Optional[np.ndarray] = None
         sr: int = 0
 
-        # Determine minimum required duration (approx 28.2 seconds for 6 chars starting at 17s, 2s apart, 1.2s slice)
-        MIN_REQUIRED_DURATION_SEC = (17 + (6 - 1) * 2) + 1.2
-
-        if not self._is_ffmpeg_available():
-            print(
-                f"ERROR: ffmpeg not found at path: {self.ffmpeg_path}. Cannot process audio."
-            )
-            return ""
-
         input_bytes: Optional[bytes] = None
-        try:
-            if hasattr(audio_stream, "read"):
-                input_bytes = audio_stream.read()
-                if not isinstance(input_bytes, bytes):  # Ensure it's bytes
-                    print("ERROR: Audio stream read did not return bytes.")
-                    return ""
-            else:
-                print(
-                    "ERROR: Audio stream is not readable or does not have a read method."
-                )
+        if hasattr(audio_stream, "read"):
+            input_bytes = audio_stream.read()
+            if not isinstance(input_bytes, bytes):  # Ensure it's bytes
+                print("ERROR: Audio stream read did not return bytes.")
                 return ""
-        except Exception as e_read:
-            print(f"ERROR: Error reading audio stream: {e_read}")
-            return ""
-
-        if not input_bytes:
-            print("ERROR: Audio stream was empty or could not be read.")
-            return ""
-
-        try:
+        if trans:
+            ffmpeg_cmd = [
+                self.ffmpeg_path,
+                "-ss",
+                "00:00:16.6",
+                "-i",
+                "-",  # Input from stdin
+                "-f",
+                "wav",
+                "-to",
+                "00:00:11",
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-",  # Output to stdout
+            ]
+        else:
             ffmpeg_cmd = [
                 self.ffmpeg_path,
                 "-i",
@@ -121,106 +111,47 @@ class CaptchaResolver:
                 "error",
                 "-",  # Output to stdout
             ]
-            process_result = subprocess.run(
-                ffmpeg_cmd, input=input_bytes, capture_output=True, check=False
-            )
+        process_result = subprocess.run(
+            ffmpeg_cmd, input=input_bytes, capture_output=True, check=False
+        )
+        if trans:
             with open(f"audio/{int(time())}.wav", "wb") as f:
                 f.write(process_result.stdout)
-
-            if process_result.returncode == 0:
-                audio_bytes_io = io.BytesIO(process_result.stdout)
-                y_arr, sr_float = librosa.load(audio_bytes_io, sr=None, duration=30.0)  # type: ignore
-                y = y_arr
-                sr = int(sr_float)
-            else:
-                print(
-                    f"ERROR: ffmpeg processing failed. Return code: {process_result.returncode}"
-                )
-                stderr_output = (
-                    process_result.stderr.decode("utf-8", errors="ignore")
-                    if process_result.stderr
-                    else "No stderr output"
-                )
-                print(f"ERROR: ffmpeg stderr: {stderr_output}")
-                # y remains None
-        except FileNotFoundError:
-            print(
-                f"ERROR: ffmpeg executable not found at '{self.ffmpeg_path}'. Please ensure ffmpeg is installed and in PATH or path is configured correctly."
-            )
-            return ""
-        except Exception as e_ffmpeg:
-            print(
-                f"ERROR: Error during ffmpeg processing or librosa loading: {e_ffmpeg}"
-            )
-            # y remains None
-
-        if y is None or sr == 0:
-            print(
-                "ERROR: Failed to load audio data using ffmpeg from the provided stream."
-            )
-            return ""
-
-        loaded_duration_sec = len(y) / sr
-
-        if loaded_duration_sec < MIN_REQUIRED_DURATION_SEC:
-            print(
-                f"ERROR: Audio duration ({loaded_duration_sec:.2f}s) is insufficient. Required: {MIN_REQUIRED_DURATION_SEC:.2f}s."
-            )
-            return ""
+        audio_bytes_io = io.BytesIO(process_result.stdout)
+        y_arr, sr_float = librosa.load(audio_bytes_io, sr=None)  # type: ignore
+        y = y_arr
+        sr = int(sr_float)
 
         mfcc_list: list[np.ndarray] = []
-        num_chars: int = 6
-        try:
-            for startTime_ms in range(15700, 28300, 50):
-                endTime_ms: int = startTime_ms + 1300
+        for startTime_ms in range(0, 10551, 50):
+            endTime_ms: int = startTime_ms + 1300
 
-                start_sample: int = int(startTime_ms  * sr / 1000)
-                end_sample: int = int(endTime_ms * sr / 1000 )
+            start_sample: int = int(startTime_ms  * sr / 1000)
+            end_sample: int = int(endTime_ms * sr / 1000 )
 
-                start_sample = max(0, start_sample)
-                end_sample = min(len(y), end_sample)
+            start_sample = max(0, start_sample)
+            end_sample = min(len(y), end_sample)
 
-                if start_sample >= end_sample:
-                    print(
-                        f"ERROR: Segmenthas invalid time range after conversion: start_sample={start_sample}, end_sample={end_sample}"
-                    )
-                    print(
-                        "ERROR: Error: Segment results in empty or invalid sample range."
-                    )
-                    return ""
+            segment: np.ndarray = y[start_sample:end_sample]
 
-                segment: np.ndarray = y[start_sample:end_sample]
+            bytes_io_obj: io.BytesIO = io.BytesIO()
+            sf.write(bytes_io_obj, segment, sr, format="WAV", subtype="PCM_16")
+            bytes_io_obj.seek(0)
 
-                bytes_io_obj: io.BytesIO = io.BytesIO()
-                sf.write(bytes_io_obj, segment, sr, format="WAV", subtype="PCM_16")
-                bytes_io_obj.seek(0)
+            mfcc: Optional[np.ndarray] = self._wav2mfcc(bytes_io_obj)
+            mfcc_list.append(mfcc)
 
-                mfcc: Optional[np.ndarray] = self._wav2mfcc(bytes_io_obj)
-                if mfcc is None:
-                    print(f"ERROR: MFCC extraction failed for segment {i + 1}.")
-                    return ""
-                mfcc_list.append(mfcc)
+        stacked_mfccs: np.ndarray = np.stack(mfcc_list)  # type: ignore
+        mfcc_batch_tensor: Tensor = (
+            torch.from_numpy(stacked_mfccs).float().unsqueeze(1)
+        )
 
-            # if len(mfcc_list) != num_chars:
-            #     print(
-            #         f"ERROR: Expected {num_chars} MFCC segments, but got {len(mfcc_list)}"
-            #     )
-            #     return ""
-
-            stacked_mfccs: np.ndarray = np.stack(mfcc_list)  # type: ignore
-            mfcc_batch_tensor: Tensor = (
-                torch.from_numpy(stacked_mfccs).float().unsqueeze(1)
-            )
-
-            ans: str = self._predict_captcha_batch(mfcc_batch_tensor)
-            print(f"Predicted captcha: {ans}")
+        ans: str = self._predict_captcha_batch(mfcc_batch_tensor)
+        print(f"Predicted captcha: {ans}")
+        return ""
+        if "?" in ans:
             return ""
-            if "?" in ans:
-                return ""
 
-        except Exception as e:
-            print(f"ERROR: Error processing audio for batch prediction: {e}")
-            return ""
 
         return ans
 
