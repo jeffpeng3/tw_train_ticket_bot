@@ -10,7 +10,7 @@ import torch
 from torch import nn, Tensor
 import io
 from typing import Optional, Any, Union, Type, Coroutine
-
+from time import time
 
 class CaptchaResolver:
     _instance: Optional["CaptchaResolver"] = None
@@ -124,6 +124,8 @@ class CaptchaResolver:
             process_result = subprocess.run(
                 ffmpeg_cmd, input=input_bytes, capture_output=True, check=False
             )
+            with open(f"audio/{int(time())}.wav", "wb") as f:
+                f.write(process_result.stdout)
 
             if process_result.returncode == 0:
                 audio_bytes_io = io.BytesIO(process_result.stdout)
@@ -170,12 +172,12 @@ class CaptchaResolver:
         num_chars: int = 6
         try:
             for i in range(num_chars):
-                start_time_sec: int = 17 + i * 2
-                startTime_ms: int = start_time_sec * 1000 - 200
-                endTime_ms: int = (start_time_sec + 1) * 1000
+                start_time_sec: float = 17 + i * 2
+                startTime_ms: int = int(start_time_sec * 1000 - 300)
+                endTime_ms: int = int((start_time_sec + 1) * 1000)
 
-                start_sample: int = int(startTime_ms / 1000 * sr)
-                end_sample: int = int(endTime_ms / 1000 * sr)
+                start_sample: int = int(startTime_ms  * sr / 1000)
+                end_sample: int = int(endTime_ms * sr / 1000 )
 
                 # Ensure samples are within bounds
                 start_sample = max(0, start_sample)
@@ -243,7 +245,6 @@ class CaptchaResolver:
             raise ValueError(
                 f"Invalid audio source: '{audio_source}'. Must be a URL or a valid file path."
             )
-
         audio_stream: io.BytesIO = io.BytesIO(audio_content)
         captcha_text: str = self._process_audio_to_text(audio_stream)
         return captcha_text
