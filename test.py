@@ -8,8 +8,8 @@ captcha_solver: CaptchaResolver = CaptchaResolver()
 t_init_end: float = time()
 print(f"Time taken to initialize CaptchaResolver: {t_init_end - t_init_start:.4f} seconds")
 
-NUM_SINGLE_TASK_RUNS: int = 10 # We are interested in single task time with internal parallelism
-AUDIO_FILE: str = "audio.mp3"
+NUM_SINGLE_TASK_RUNS: int = 1 # We are interested in single task time with internal parallelism
+AUDIO_FILE: str = "audio/JC8ARR.wav"
 
 # --- 測試單個任務執行時間 (內部已並行化) ---
 print(f"\nRunning a single captcha processing task ({NUM_SINGLE_TASK_RUNS} time(s)) to measure performance...")

@@ -171,24 +171,21 @@ class CaptchaResolver:
         mfcc_list: list[np.ndarray] = []
         num_chars: int = 6
         try:
-            for i in range(num_chars):
-                start_time_sec: float = 17 + i * 2
-                startTime_ms: int = int(start_time_sec * 1000 - 300)
-                endTime_ms: int = int((start_time_sec + 1) * 1000)
+            for startTime_ms in range(15700, 28300, 50):
+                endTime_ms: int = startTime_ms + 1300
 
                 start_sample: int = int(startTime_ms  * sr / 1000)
                 end_sample: int = int(endTime_ms * sr / 1000 )
 
-                # Ensure samples are within bounds
                 start_sample = max(0, start_sample)
                 end_sample = min(len(y), end_sample)
 
                 if start_sample >= end_sample:
                     print(
-                        f"ERROR: Segment {i + 1} has invalid time range after conversion: start_sample={start_sample}, end_sample={end_sample}"
+                        f"ERROR: Segmenthas invalid time range after conversion: start_sample={start_sample}, end_sample={end_sample}"
                     )
                     print(
-                        f"ERROR: Error: Segment {i + 1} results in empty or invalid sample range."
+                        "ERROR: Error: Segment results in empty or invalid sample range."
                     )
                     return ""
 
@@ -204,11 +201,11 @@ class CaptchaResolver:
                     return ""
                 mfcc_list.append(mfcc)
 
-            if len(mfcc_list) != num_chars:
-                print(
-                    f"ERROR: Expected {num_chars} MFCC segments, but got {len(mfcc_list)}"
-                )
-                return ""
+            # if len(mfcc_list) != num_chars:
+            #     print(
+            #         f"ERROR: Expected {num_chars} MFCC segments, but got {len(mfcc_list)}"
+            #     )
+            #     return ""
 
             stacked_mfccs: np.ndarray = np.stack(mfcc_list)  # type: ignore
             mfcc_batch_tensor: Tensor = (
@@ -216,7 +213,8 @@ class CaptchaResolver:
             )
 
             ans: str = self._predict_captcha_batch(mfcc_batch_tensor)
-
+            print(f"Predicted captcha: {ans}")
+            return ""
             if "?" in ans:
                 return ""
 
