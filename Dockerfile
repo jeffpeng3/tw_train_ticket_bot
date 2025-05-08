@@ -30,7 +30,7 @@ RUN uv pip install --system --no-cache -r requirements.txt
 COPY . .
 
 # 建立 log 目錄
-RUN mkdir log
+RUN mkdir -p log
 
 # 7. 公開端口 (預設 8000)
 EXPOSE 8000
