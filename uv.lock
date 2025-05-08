@@ -1391,7 +1391,7 @@ dependencies = [
 requires-dist = [
     { name = "beautifulsoup4", specifier = "==4.6.3" },
     { name = "flask", specifier = "==1.1.4" },
-    { name = "gunicorn", specifier = ">=23.0.0" },
+    { name = "gunicorn", specifier = "==23.0.0" },
     { name = "librosa", specifier = "==0.9.1" },
     { name = "lxml", specifier = ">=5.4.0" },
     { name = "markupsafe", specifier = "==2.0.1" },
