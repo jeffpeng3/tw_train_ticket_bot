@@ -43,9 +43,31 @@ class CaptchaResolver:
         self, audio_input: Union[str, io.BytesIO], max_pad_len: int = 35
     ) -> Optional[np.ndarray]:
         """Converts WAV audio (from file-like object or path) to MFCC features."""
-        wave, sr = librosa.load(audio_input, mono=True, sr=None)  # type: ignore
+        try:
+            wave, sr = librosa.load(audio_input, mono=True, sr=None)  # type: ignore
+        except Exception as e:
+            # print(f"Warning: librosa.load failed in _wav2mfcc. Error: {e}") # 可選的日誌
+            return None
+
+        if wave is None or len(wave) == 0: # 檢查 librosa.load 是否返回空或載入後為空
+            # print("Warning: Audio is empty after librosa.load or input was invalid in _wav2mfcc.") # 可選的日誌
+            return None
+
         wave = wave[::3]
-        mfcc: np.ndarray = librosa.feature.mfcc(y=wave, sr=16000)  # type: ignore
+
+        if len(wave) == 0:
+            # print("Warning: Audio is empty after downsampling in _wav2mfcc.") # 可選的日誌
+            return None
+
+        n_fft_to_use = 2048
+        if len(wave) < n_fft_to_use:
+            n_fft_to_use = len(wave)
+        
+        if n_fft_to_use < 4: # n_fft 至少需要為 4，以確保 hop_length (n_fft // 4) >= 1
+            # print(f"Warning: Signal too short for MFCC after downsampling (len: {len(wave)}). Effective n_fft would be {n_fft_to_use}. Skipping MFCC.") # 可選的日誌
+            return None
+
+        mfcc: np.ndarray = librosa.feature.mfcc(y=wave, sr=16000, n_fft=n_fft_to_use)  # type: ignore
 
         if mfcc.shape[1] < max_pad_len:
             pad_width: int = max_pad_len - mfcc.shape[1]
@@ -75,31 +97,9 @@ class CaptchaResolver:
         return "".join(predicted_chars)
 
     def _get_char_from_raw_prediction_segment(self, segment: str) -> str:
-        """
-        從原始預測片段中獲取最可能的單個字符。
-        使用投票法，如果票數相同，則選擇第一個出現的字符。
-        """
-        if not segment:
-            return ""  # 或其他標識符，例如 "?"
-        
-        # 投票選出最常見的字符
         counts = collections.Counter(segment)
-        # 找到最高票數
-        max_count = 0
-        for char in counts:
-            if counts[char] > max_count:
-                max_count = counts[char]
-        
-        # 找出所有最高票數的字符 (可能有多個)
-        # 為了穩定性，我們選擇在原始 segment 中第一個出現的最高票字符
-        # 或者，可以簡單地選擇 counts.most_common(1)[0][0]
-        # 這裡我們選擇 most_common，它會處理平局情況（雖然不保證順序）
-        # 為了更精確地符合「選擇第一個出現」，需要更複雜的邏輯，但通常 most_common(1) 夠用
-        if not counts: # 再次檢查，雖然前面有 if not segment
-            return ""
-
         most_common_char = counts.most_common(1)[0][0]
-        # print(f"    Segment '{segment}' -> Most common: '{most_common_char}' (Counts: {counts})") # 日誌
+        print(f"    Segment '{segment}' -> Most common: '{most_common_char}' (Counts: {counts})") # 日誌
         return most_common_char
 
     def _process_audio_to_text(self, audio_stream: io.BufferedIOBase, trans = True) -> str:
@@ -166,7 +166,7 @@ class CaptchaResolver:
             print("ERROR: Audio data is empty after librosa.load.")
             return ""
 
-        mfcc_list: list[np.ndarray] = []
+        all_mfccs_list: list[np.ndarray] = []
         # 滑動窗口參數 (保持與原碼一致)
         window_duration_ms = 1300
         step_ms = 50
@@ -205,92 +205,90 @@ class CaptchaResolver:
 
             mfcc: Optional[np.ndarray] = self._wav2mfcc(bytes_io_obj) # max_pad_len=35
             if mfcc is not None:
-                 mfcc_list.append(mfcc)
+                 all_mfccs_list.append(mfcc)
                  num_segments += 1
             else:
                 print(f"Warning: MFCC for segment starting at {startTime_ms}ms was None.")
         
-        if not mfcc_list:
+        if not all_mfccs_list:
             print("ERROR: No MFCC features could be extracted.")
             return ""
 
-        stacked_mfccs: np.ndarray = np.stack(mfcc_list)
-        mfcc_batch_tensor: Tensor = (
-            torch.from_numpy(stacked_mfccs).float().unsqueeze(1)
-        )
+        L_raw: int = num_segments # L_raw is now the number of MFCC segments
 
-        raw_model_output: str = self._predict_captcha_batch(mfcc_batch_tensor)
-        print(f"Log: Raw model output: '{raw_model_output}' (Length: {len(raw_model_output)})")
-
-        # --- 新的基於固定間隔長度的核心採樣邏輯 ---
+        # --- 新的基於優化 MFCC 推理的核心採樣邏輯 ---
         final_captcha_chars: list[str] = []
-        intervals: list[int] = [1, 42, 39, 40, 38, 40]  # 使用者提供的固定間隔長度
-        
-        L_raw: int = len(raw_model_output)
-        sum_intervals: int = sum(intervals)
-
-        # 日誌記錄 raw_model_output 的總長度和 sum_intervals
-        print(f"Log: Total length of raw_model_output: {L_raw}")
-        print(f"Log: Sum of specified intervals: {sum_intervals}")
-
-        if L_raw == 0:
-            print("ERROR: Raw model output is empty. Cannot proceed.")
-            return ""
-
-        # 主要檢查：raw_model_output 的總長度是否大於或等於 sum_intervals
-        if L_raw < sum_intervals:
-            print(f"ERROR: Raw model output length ({L_raw}) is less than the sum of intervals ({sum_intervals}). Cannot reliably extract all characters.")
-            return ""  # 根據指示，長度不足時返回空字串
-
-        current_cumulative_offset: int = 0
+        intervals: list[int] = [1, 42, 39, 41, 37, 40]  # 使用者提供的固定間隔長度
         core_sample_radius: int = 3  # 中心點前後各取3個點，總共 2*3+1 = 7點
+        user_defined_center_points = [1, 43, 83, 125, 165, 204]
+        
+        all_calculated_core_indices = []
+        max_required_idx = -1 # Stores the maximum index (0-based) required from all_mfccs_list
+        _current_cumulative_offset_for_calc = 0 # Used for calculating indices based on intervals
 
-        for i, interval_len in enumerate(intervals):
-            # 計算此字元在其自身間隔內的相對中心點
-            relative_center: int = interval_len // 2
-            # 計算此字元在整個 raw_model_output 中的絕對中心點索引
-            center_idx: int = current_cumulative_offset + relative_center
 
-            # 提取核心採樣片段的起始和結束索引
-            # 嚴格處理邊界條件
-            # center_idx is calculated based on interval_len // 2 for logging and i==0 case
-            # (This variable should already be defined from line 252: center_idx = current_cumulative_offset + (interval_len // 2) )
+        for idx, _interval_len_for_calc in enumerate(intervals): # Renamed i_calc to idx for clarity with user instructions
+            _actual_center_idx = user_defined_center_points[idx]
 
-            if i == 0:
-                # For the first character, use the original logic based on its interval's midpoint (center_idx)
-                start_core_idx = max(0, center_idx - core_sample_radius)
-                end_core_idx = min(L_raw, center_idx + core_sample_radius + 1)
-            else:
-                # For subsequent characters (i > 0)
-                # The sampling window starts at the last index of the current character's segment
-                _start_offset_in_raw_output = current_cumulative_offset + interval_len - 1
-                start_core_idx = max(0, _start_offset_in_raw_output) # Ensure non-negative
-                
-                window_len = (2 * core_sample_radius) + 1 # Should be 7 if core_sample_radius is 3
-                end_core_idx = min(L_raw, start_core_idx + window_len)
+            _start_core_idx_calc = max(0, _actual_center_idx - core_sample_radius)
+            _end_core_idx_calc = _actual_center_idx + core_sample_radius + 1 # Desired end, not clamped by L_raw here
             
-            core_segment: str
-            # 確保提取的片段不為空 (start_core_idx < end_core_idx)
-            if start_core_idx >= end_core_idx:
-                print(f"Warning: Char {i+1}: Core segment calculation resulted in empty or invalid range. interval_len={interval_len}, center_idx={center_idx}, calculated_indices=[{start_core_idx}:{end_core_idx}]. Appending '?'")
-                core_segment = ""
-            else:
-                core_segment = raw_model_output[start_core_idx:end_core_idx]
+            all_calculated_core_indices.append((_start_core_idx_calc, _end_core_idx_calc))
 
-            # 日誌記錄每個字元的處理信息
-            print(f"Log: Char {i+1}: interval_len={interval_len}, current_cumulative_offset={current_cumulative_offset}, center_idx={center_idx}, Core_indices=[{start_core_idx}:{end_core_idx}], Core_segment='{core_segment}'")
+            if _end_core_idx_calc > _start_core_idx_calc: # Ensure valid range before calculating max_required_idx
+                 max_required_idx = max(max_required_idx, _end_core_idx_calc - 1) # _end_core_idx_calc is exclusive for slicing, so -1 for max index
 
-            predicted_char: str = self._get_char_from_raw_prediction_segment(core_segment)
-            
-            if not predicted_char: # 如果投票結果為空
-                print(f"Warning: Char {i+1}: _get_char_from_raw_prediction_segment returned empty for segment '{core_segment}'. Appending '?'")
-                final_captcha_chars.append("?") # 使用 '?' 作為錯誤標識
+            _current_cumulative_offset_for_calc += _interval_len_for_calc # Retained as per instructions
+        
+        # print(f"Log: Max required MFCC index: {max_required_idx}. L_raw (available MFCCs): {L_raw}")
+
+
+        current_cumulative_offset: int = 0 # Initialize for the main loop
+
+        for i, interval_len_loop in enumerate(intervals): # interval_len_loop is used for current_cumulative_offset update
+            start_core_idx, end_core_idx = all_calculated_core_indices[i] # These are for all_mfccs_list
+
+            if start_core_idx >= L_raw:
+                print(f"Warning: Char {i+1}: Start index {start_core_idx} for MFCC segment is out of bounds (L_raw={L_raw}). Appending '?'")
+                final_captcha_chars.append("?")
+                current_cumulative_offset += interval_len_loop
+                continue
+
+            actual_end_core_idx = min(end_core_idx, L_raw)
+
+            predicted_char: str
+            if start_core_idx >= actual_end_core_idx:
+                print(f"Warning: Char {i+1}: Core MFCC segment is invalid or empty. Indices for all_mfccs_list: [{start_core_idx}:{actual_end_core_idx}], L_raw={L_raw}. Appending '?'")
+                predicted_char = "?"
             else:
-                final_captcha_chars.append(predicted_char)
-            print(f"Log: Char {i+1} predicted: '{predicted_char}'")
+                core_segment_mfccs = all_mfccs_list[start_core_idx:actual_end_core_idx]
+                # print(f"Log: Char {i+1}: Processing MFCCs from index {start_core_idx} to {actual_end_core_idx-1}. Count: {len(core_segment_mfccs)}")
+
+                if not core_segment_mfccs:
+                    print(f"Warning: Char {i+1}: Extracted core_segment_mfccs is empty for indices [{start_core_idx}:{actual_end_core_idx}]. Appending '?'")
+                    predicted_char = "?"
+                else:
+                    try:
+                        stacked_core_mfccs = np.stack(core_segment_mfccs)
+                        mfcc_batch_tensor_for_segment = torch.from_numpy(stacked_core_mfccs).float().unsqueeze(1)
+                        
+                        raw_chars_for_segment: str = self._predict_captcha_batch(mfcc_batch_tensor_for_segment)
+                        # print(f"Log: Char {i+1}: Raw prediction for its segment: '{raw_chars_for_segment}'")
+
+                        predicted_char = self._get_char_from_raw_prediction_segment(raw_chars_for_segment)
+                        if not predicted_char:
+                            print(f"Warning: Char {i+1}: _get_char_from_raw_prediction_segment returned empty for raw_chars '{raw_chars_for_segment}'. Appending '?'")
+                            predicted_char = "?"
+                    except Exception as e_pred:
+                        print(f"ERROR: Char {i+1}: Failed during prediction for MFCC segment [{start_core_idx}:{actual_end_core_idx}]. Error: {e_pred}. Appending '?'")
+                        predicted_char = "?"
             
-            # 更新 current_cumulative_offset 為下一個間隔的開始做準備
-            current_cumulative_offset += interval_len
+            final_captcha_chars.append(predicted_char)
+            
+            center_idx_log = user_defined_center_points[i]
+            print(f"Log: Char {i+1}: interval_len={interval_len_loop}, center_pt={center_idx_log}, current_cumulative_offset={current_cumulative_offset}, MFCC_Core_indices=[{start_core_idx}:{actual_end_core_idx}], Predicted='{predicted_char}'")
+
+            current_cumulative_offset += interval_len_loop
 
         final_captcha: str = "".join(final_captcha_chars)
         print(f"Log: Final predicted captcha (using fixed intervals): '{final_captcha}'")
