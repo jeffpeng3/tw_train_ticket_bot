@@ -99,7 +99,6 @@ class CaptchaResolver:
     def _get_char_from_raw_prediction_segment(self, segment: str) -> str:
         counts = collections.Counter(segment)
         most_common_char = counts.most_common(1)[0][0]
-        print(f"    Segment '{segment}' -> Most common: '{most_common_char}' (Counts: {counts})") # 日誌
         return most_common_char
 
     def _process_audio_to_text(self, audio_stream: io.BufferedIOBase, trans = True) -> str:
@@ -286,12 +285,9 @@ class CaptchaResolver:
             final_captcha_chars.append(predicted_char)
             
             center_idx_log = user_defined_center_points[i]
-            print(f"Log: Char {i+1}: interval_len={interval_len_loop}, center_pt={center_idx_log}, current_cumulative_offset={current_cumulative_offset}, MFCC_Core_indices=[{start_core_idx}:{actual_end_core_idx}], Predicted='{predicted_char}'")
-
             current_cumulative_offset += interval_len_loop
 
         final_captcha: str = "".join(final_captcha_chars)
-        print(f"Log: Final predicted captcha (using fixed intervals): '{final_captcha}'")
         
         return final_captcha
 
