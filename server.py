@@ -188,6 +188,7 @@ class RailwayBot(threading.Thread):
       # try:
       buy_status = self.buy_tickets(pid, startStation, endStation, normalQty, rideDate, trainNo_1, trainNo_2, trainNo_3, canChangeSeat)
       if "驗證碼驗證失敗" in buy_status:
+        print("驗證碼驗證失敗")
         times -= 1
       else:
         res = str(self.now()) + "\nt" + str(rideDate) + " " + str(startStation.split('-')[1]) + "👉" + str(endStation.split('-')[1]) + " " + str(normalQty)+ "張 " + str(trainNo_1)+ " " + str(trainNo_2)+ " " + str(trainNo_3) + "\n"+"第 "+str(times)+" 次嘗試購票 "+ buy_status+"\n"

@@ -1,0 +1,7 @@
+services:
+  tra:
+    image: ghcr.io/jeffpeng3/tw_train_ticket_bot:main
+    restart: always
+    ports:
+      - 8000:8000
+    init: true
