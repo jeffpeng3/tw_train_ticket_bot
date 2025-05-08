@@ -43,10 +43,6 @@ class Ticket:
     def to_payload(
         self, csrf_token: str, quick_tip_token: str, captcha_code: str
     ) -> list[tuple[str, str]]:
-        """
-        Generates the payload for the booking request.
-        The train_data part of the payload is converted to list[tuple[str, str]].
-        """
 
         payload_dict: dict[str, Any] = {
             "_csrf": csrf_token,
@@ -79,7 +75,7 @@ class Ticket:
                     payload_dict[f"ticketOrderParamList[0].ticketTypeList[{i}]"] = ""
         elif self.mode == Mode.time:
             payload_dict["ticketOrderParamList[0].startOrEndTime"] = (
-                "true"  # This seems to be required for BY_TIME
+                "true"
             )
             payload_dict["ticketOrderParamList[0].startTime"] = self.start_time
             payload_dict["ticketOrderParamList[0].endTime"] = self.end_time
