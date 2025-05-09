@@ -6,7 +6,6 @@ import os
 import tensorflow as tf
 from flask import Flask, jsonify, request
 import tempfile # 匯入 tempfile 模組
-# shutil 不再需要，因為 TemporaryDirectory 會自動清理
 
 # TensorFlow Lite模型初始化
 classification = "bcdfghjklmnpqrstvwxy32475689a"
